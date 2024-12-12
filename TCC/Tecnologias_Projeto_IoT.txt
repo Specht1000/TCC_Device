@@ -1,0 +1,72 @@
+Lista de Tecnologias
+
+1. Hardware:
+   - ESP32 Wrover. - R$96,77
+   - Sensores:
+       - DHT22: Temperatura e Umidade do Ar. - R$114,00
+       - BH1750: Sensor de Luminosidade. - R$24,89
+       - Sensor de Umidade do Solo (capacitivo). - R$39,90
+       - (Opcional) MQ-135: Qualidade do Ar. - R$18,60
+       - (Opcional) Sensor de pH do Solo. - R$656,67
+       - MH-Z19: Sensor de CO2 - R$170,31
+       - DS3231: RTC - R$22,99
+   - Alimentação:
+       - Painel Solar (5W ou 10W). - R$182,31
+       - Bateria LiPo (2000mAh ou 3000mAh). - R$157,43
+       - Módulo de Carregamento Solar (TP4056). - R$12,12
+   - Conexões:
+       - Protoboard - R$73,90 
+       - Jumpers. - R$33,82
+       - Caixa de proteção para ambiente externo.
+   - LoraWan:
+       - (Opcional) Antena 433MHZ - R$44,90
+       - Módulo Lora Ra-02 - R$65,00
+
+2. Software no Microcontrolador:
+   - PlatformIO no Visual Studio Code.
+   - Linguagem: C++ (Framework Arduino).
+   - FreeRTOS.
+   - NTP.
+   - Bibliotecas:
+       - MQTT.h (para MQTT).
+       - DHT.h (para o sensor DHT22).
+       - BH1750.h (para o sensor de luminosidade).
+       - WiFi.h (para conectividade Wi-Fi).
+       - HTTPClient.h (caso use HTTP para backup).
+
+3. Comunicação:
+   - Protocolo MQTT:
+       - Servidor MQTT (Broker):
+           - Broker Mosquitto (local ou remoto).
+           - CloudMQTT (grátis para testes).
+           - EMQX (opcional).
+       - Tópicos para sensores: iot/sensores/temperatura, iot/sensores/umidade, etc.
+   - Alternativa: Protocolo HTTP (caso MQTT não esteja disponível).
+
+4. Banco de Dados:
+   - MySQL:
+       - Servidor para armazenar os dados dos sensores.
+       - Script API REST para inserir dados no banco.
+   - Alternativa: InfluxDB (para integração com Grafana).
+
+5. Dashboard para o Usuário:
+   - Node-RED:
+       - Para exibir gráficos e dados em tempo real.
+       - Inscrição nos tópicos MQTT.
+   - Front-End Web (opcional):
+       - HTML/CSS/JavaScript para interface personalizada.
+       - Chart.js: Para gráficos interativos.
+       - Bootstrap: Para design responsivo.
+   - Grafana (opcional):
+       - Para criar dashboards detalhados conectados ao MySQL ou InfluxDB.
+
+6. Outras Ferramentas:
+   - MySQL Workbench (para gerenciar o banco de dados).
+   - Postman (para testar requisições HTTP).
+   - Multímetro. - R$29,00
+
+7. Extra:
+   - Firebase (para notificações push).
+   - MQTT BOX e MQTT Explorer (aplicativo para visualizar dados).
+   - Termite3 (terminal serial)
+

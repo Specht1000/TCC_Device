@@ -28,7 +28,7 @@ BH1750Sensor bh1750Sensor;              // I2C (pinos 21 e 22)
 MQ135Sensor mq135Sensor(34);            // Pino 34 para MQ135
 MHZ19Sensor mhz19Sensor(Serial2);       // Serial2 para MH-Z19
 SoilMoistureSensor soilSensor(32, 35);  // Pinos 32 (analógico) e 35 (digital) para sensor de umidade do solo
-RTC_DS3231 rtcDs3231;                         // Objeto RTC no I2C
+RTC_DS3231 rtcDs3231;                   // Objeto RTC no I2C
 
 SemaphoreHandle_t i2cMutex;
 
