@@ -14,6 +14,7 @@ enum TASKS_TIMER {
     MONITOR_MQ135,
     MONITOR_MHZ19,
     MONITOR_SOIL,
+    MONITOR_SOIL_PH,
     MONITOR_COUNT   // Número total de tasks
 };
 
@@ -31,6 +32,7 @@ const TaskInfo taskInfoArray[MONITOR_COUNT] = {
     {MONITOR_MQ135,  "MQ135 "},
     {MONITOR_MHZ19,  "MHZ19 "},
     {MONITOR_SOIL,   "SOIL  "},
+    {MONITOR_SOIL_PH,"PH    "}
 };
 
 // Estrutura para armazenar o tempo de execução e o contador de execuções de cada task
