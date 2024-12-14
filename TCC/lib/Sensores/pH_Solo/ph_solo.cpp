@@ -2,11 +2,13 @@
 
 SoilPHSensor::SoilPHSensor(uint8_t analogPin) : _analogPin(analogPin) {}
 
-void SoilPHSensor::beginSoilPH() {
+void SoilPHSensor::beginSoilPH()
+{
     pinMode(_analogPin, INPUT);
 }
 
-float SoilPHSensor::readSoilPH() {
+float SoilPHSensor::readSoilPH()
+{
     int analogValue = analogRead(_analogPin);
     // Converte o valor analógico para pH (exemplo genérico)
     float voltage = analogValue * (5.0 / 1023.0); // Para placas de 10 bits, ajuste se necessário
@@ -14,7 +16,8 @@ float SoilPHSensor::readSoilPH() {
     return phValue;
 }
 
-bool SoilPHSensor::isSoilPHConnected() {
+bool SoilPHSensor::isSoilPHConnected()
+{
     int analogValue = analogRead(_analogPin);
     return (analogValue > 0 && analogValue < 1023); // Sensor é considerado conectado se valores são válidos
 }

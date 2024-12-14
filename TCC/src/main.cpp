@@ -7,6 +7,7 @@
  * Descrição: Firmware de coleta e análise de dados
  *****************************************************************************/
 
+/* Bibliotecas externas */
 #include <Arduino.h>
 #include <WiFi.h>
 #include <ArduinoJson.h>
@@ -14,6 +15,8 @@
 #include <WiFiClient.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
+
+/* Bibliotecas internas */
 #include "main.h"
 #include "../lib/Sensores/Temperatura_Umidade/dht22.h"
 #include "../lib/Sensores/Luminosidade/bh1750.h"
@@ -22,37 +25,43 @@
 #include "../lib/Sensores/Umidade_Solo/umidade_solo.h"
 #include "../lib/Sensores/pH_Solo/ph_solo.h"
 #include "tasks/task_monitor.h"
-#include "rtc.h"
 
+/* Configuração WiFi */
 const char* ssid = "igoal_24G";
 const char* password = "igoal@2021";
 
+/* Configuração MQTT */
 WiFiClient wifiClient;
 PubSubClient mqttClient(wifiClient);
 const char* mqttBroker = "broker.hivemq.com";
 const int mqttPort = 1883;
-const char* mqttTopic = "telemetry/data";
+const char* mqttTopic = "iot/data";
 
+/* Objetos dos sensores */
 DHT22Sensor dhtSensor(15);              // Pino 15 para DHT22
 BH1750Sensor bh1750Sensor;              // I2C (pinos 21 e 22)
 MQ135Sensor mq135Sensor(34);            // Pino 34 para MQ135
 MHZ19Sensor mhz19Sensor(Serial2);       // Serial2 para MH-Z19
 SoilMoistureSensor soilSensor(32, 35);  // Pinos 32 (analógico) e 35 (digital) para sensor de umidade do solo
-SoilPHSensor soilPHSensor(36);          // Pino 36 analógico para o sensor de pH
-RTC_DS3231 rtcDs3231;                   // Objeto RTC no I2C
+SoilPHSensor soilPHSensor(36);          // Pino 36 analógico para o sensor de pH 
 
+/* Semáforos */
 SemaphoreHandle_t i2cMutex;
 
+/* Protótipos das funções */
 void connectToWiFi();
+void publishTelemetry();
+void initRtcInternal();
+struct tm getRtcTimeInternal();
+void setRtcInternal(uint8_t day, uint8_t month, uint16_t year, uint8_t hour, uint8_t min, uint8_t sec);
 
+/* Tasks */
 void taskDHT22(void* parameter);
 void taskBH1750(void* parameter);
 void taskMQ135(void* parameter);
 void taskMHZ19(void* parameter);
 void taskSoilMoisture(void* parameter);
 void taskSoilPH(void* parameter);
-
-void publishTelemetry();
 
 void setup() 
 {
@@ -66,15 +75,15 @@ void setup()
     Serial.print(" * Data: \n");
     Serial.print(" * Descricao: Firmware de coleta e analise de dados\n");
     Serial.print("/******************************************************************************\n");
-    LOG("SETUP", "Inicializando o sistema...");
-
-    rtcDs3231.initRtc(); 
+    LOG("SETUP", "Inicializando o sistema..."); 
 
     i2cMutex = xSemaphoreCreateMutex();
-    if (i2cMutex == NULL) {
+    if (i2cMutex == NULL) 
+    {
         LOG("I2C", "Falha ao criar o mutex.");
     } 
-    else {
+    else 
+    {
         LOG("I2C", "Mutex criado com sucesso.");
     }
 
@@ -105,10 +114,12 @@ void loop()
     unsigned long currentMillis = millis();
 
     // Verifica o WiFi a cada 5 segundos
-    if (currentMillis - lastWiFiCheck >= 5000) {
+    if (currentMillis - lastWiFiCheck >= 5000)
+    {
         lastWiFiCheck = currentMillis;
 
-        if (WiFi.status() != WL_CONNECTED) {
+        if (WiFi.status() != WL_CONNECTED)
+        {
             LOG("WIFI", "WiFi desconectado! Tentando reconectar...");
             connectToWiFi();
         }
@@ -142,35 +153,104 @@ void connectToWiFi()
     } 
 }
 
-void publishTelemetry() {
+void initRtcInternal() 
+{
+    if (WiFi.status() == WL_CONNECTED) 
+    {
+        LOG("RTC", "Conectado ao WiFi. Configurando NTP...");
+        configTime(-3 * 3600, 0, "pool.ntp.org", "time.nist.gov"); // Configuração UTC-3 para o Brasil
+
+        struct tm timeinfo;
+        if (getLocalTime(&timeinfo)) 
+        {
+            LOG("RTC", "Horário atualizado pelo NTP: %02d/%02d/%04d %02d:%02d:%02d",
+                timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900,
+                timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec);
+        } 
+        else 
+        {
+            LOG("RTC", "Falha ao obter o horário do servidor NTP.");
+        }
+    } 
+    else 
+    {
+        LOG("RTC", "WiFi não conectado. RTC interno não atualizado.");
+    }
+}
+
+struct tm getRtcTimeInternal() 
+{
+    struct tm timeinfo;
+    if (getLocalTime(&timeinfo)) 
+    {
+        LOG("RTC", "Hora atual: %02d:%02d:%02d, Data: %02d/%02d/%04d",
+            timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
+            timeinfo.tm_mday, timeinfo.tm_mon + 1, timeinfo.tm_year + 1900);
+    } 
+    else 
+    {
+        LOG("RTC", "Erro ao obter o horário do RTC interno.");
+    }
+    return timeinfo;
+}
+
+void setRtcInternal(uint8_t day, uint8_t month, uint16_t year, uint8_t hour, uint8_t min, uint8_t sec) 
+{
+    struct tm timeinfo = {0};
+    timeinfo.tm_mday = day;
+    timeinfo.tm_mon = month - 1; // Meses começam em 0
+    timeinfo.tm_year = year - 1900; // Anos a partir de 1900
+    timeinfo.tm_hour = hour;
+    timeinfo.tm_min = min;
+    timeinfo.tm_sec = sec;
+
+    time_t t = mktime(&timeinfo);
+    struct timeval now = { .tv_sec = t };
+    settimeofday(&now, NULL);
+
+    Serial.printf("RTC configurado manualmente para: %02d/%02d/%04d %02d:%02d:%02d\n",
+                  day, month, year, hour, min, sec);
+}
+
+void publishTelemetry()
+{
     StaticJsonDocument<512> jsonDoc;
 
     // Adiciona dados do DHT22
-    if (dhtSensor.isDHT22Connected()) {
+    if (dhtSensor.isDHT22Connected())
+    {
         float temperature = 0.0, humidity = 0.0;
         dhtSensor.readDHT22(temperature, humidity);
         jsonDoc["temperature"] = temperature;
         jsonDoc["humidity"] = humidity;
-    } else {
+    }
+    else
+    {
         jsonDoc["temperature"] = "NaN";
         jsonDoc["humidity"] = "NaN";
     }
 
     // Adiciona dados do BH1750
-    if (bh1750Sensor.isBH1750Connected()) {
+    if (bh1750Sensor.isBH1750Connected())
+    {
         float lux = 0.0;
         bh1750Sensor.readBH1750(lux);
         jsonDoc["lux"] = lux;
-    } else {
+    } 
+    else
+    {
         jsonDoc["lux"] = "NaN";
     }
 
     // Adiciona dados do MQ135
-    if (mq135Sensor.isMQ135Connected()) {
+    if (mq135Sensor.isMQ135Connected())
+    {
         float airQuality = 0.0;
         mq135Sensor.readAirQuality(airQuality);
         jsonDoc["airQuality"] = airQuality;
-    } else {
+    } 
+    else
+    {
         jsonDoc["airQuality"] = "NaN";
     }
 
@@ -179,28 +259,36 @@ void publishTelemetry() {
         int co2 = 0;
         mhz19Sensor.readCO2(co2);
         jsonDoc["co2"] = co2;
-    } else {
+    }
+    else 
+    {
         jsonDoc["co2"] = "NaN";
     }
 
     // Adiciona dados de umidade do solo
-    if (soilSensor.isSoilMConnected()) {
+    if (soilSensor.isSoilMConnected())
+    {
         int soilAnalog = soilSensor.readAnalog();
         jsonDoc["soilMoisture"] = soilAnalog;
-    } else {
+    } 
+    else 
+    {
         jsonDoc["soilMoisture"] = "NaN";
     }
 
     // Adiciona dados de pH do solo
-    if (soilPHSensor.isSoilPHConnected()) {
+    if (soilPHSensor.isSoilPHConnected()) 
+    {
         float ph = soilPHSensor.readSoilPH();
         jsonDoc["soilPH"] = ph;
-    } else {
+    } 
+    else 
+    {
         jsonDoc["soilPH"] = "NaN";
     }
 
-    // Adiciona data/hora do RTC
-    RTCx::tm rtcTime = rtcDs3231.getTimeRTC(false);
+    // Adiciona data/hora do RTC interno
+    struct tm rtcTime = getRtcTimeInternal();
     char timeBuffer[20];
     snprintf(timeBuffer, sizeof(timeBuffer), "%02d/%02d/%04d %02d:%02d:%02d", rtcTime.tm_mday, rtcTime.tm_mon + 1, rtcTime.tm_year + 1900, rtcTime.tm_hour, rtcTime.tm_min, rtcTime.tm_sec);
     jsonDoc["timestamp"] = String(timeBuffer);
@@ -209,23 +297,30 @@ void publishTelemetry() {
     char jsonBuffer[512];
     serializeJson(jsonDoc, jsonBuffer);
 
-    if (mqttClient.publish(mqttTopic, jsonBuffer)) {
+    if (mqttClient.publish(mqttTopic, jsonBuffer))
+    {
         LOG("MQTT", "Dados publicados com sucesso: ");
         Serial.println(jsonBuffer);
-    } else {
+    }
+    else
+    {
         LOG("MQTT", "Falha ao publicar os dados MQTT.");
     }
 }
 
-void taskDHT22(void* parameter) {
+void taskDHT22(void* parameter)
+{
     LOG("DHT22", "Task DHT22 iniciada.");
-    while (true) {
+    while (true)
+    {
         startTaskTimer(MONITOR_DHT22); // Início do timer
-        if (xSemaphoreTake(i2cMutex, portMAX_DELAY)) {
+        if (xSemaphoreTake(i2cMutex, portMAX_DELAY))
+        {
             float temperature = 0.0;
             float humidity = 0.0;
 
-            if (dhtSensor.isDHT22Connected()) {
+            if (dhtSensor.isDHT22Connected())
+            {
                 dhtSensor.readDHT22(temperature, humidity);
             }
             xSemaphoreGive(i2cMutex);
@@ -235,14 +330,17 @@ void taskDHT22(void* parameter) {
     }
 }
 
-void taskBH1750(void* parameter) {
+void taskBH1750(void* parameter)
+{
     LOG("BH1750", "Task BH1750 iniciada.");
     while (true) {
         startTaskTimer(MONITOR_BH1750); // Início do timer
-        if (xSemaphoreTake(i2cMutex, portMAX_DELAY)) {
+        if (xSemaphoreTake(i2cMutex, portMAX_DELAY))
+        {
             float lux = 0.0;
 
-            if (bh1750Sensor.isBH1750Connected()) {
+            if (bh1750Sensor.isBH1750Connected())
+            {
                 bh1750Sensor.readBH1750(lux);
             }
             xSemaphoreGive(i2cMutex);
@@ -254,19 +352,24 @@ void taskBH1750(void* parameter) {
 
 void taskMQ135(void* parameter) {
     LOG("MQ135", "Task MQ135 iniciada.");
-    while (true) {
+    while (true)
+    {
         startTaskTimer(MONITOR_MQ135); // Início do timer
 
         if (mq135Sensor.isMQ135Connected()) { // Verifica se o sensor está conectado
             float ppm = 0.0;
 
-            if (mq135Sensor.readAirQuality(ppm)) {
+            if (mq135Sensor.readAirQuality(ppm))
+            {
                 LOG("MQ135", "Qualidade do ar: %.2f ppm", ppm);
-            } else {
+            } 
+            else
+            {
                 LOG("MQ135", "Falha na leitura do MQ135.");
             }
         }
-        else {
+        else 
+        {
             LOG("MQ135", "Sensor MQ135 desconectado!");
         }
 
@@ -275,27 +378,36 @@ void taskMQ135(void* parameter) {
     }
 }
 
-void taskMHZ19(void* parameter) {
+void taskMHZ19(void* parameter)
+{
     LOG("MHZ19", "Task MHZ19 iniciada.");
     MHZ19Sensor* sensor = static_cast<MHZ19Sensor*>(parameter);
 
-    if (sensor == nullptr) {
+    if (sensor == nullptr)
+    {
         LOG("MHZ19", "Sensor não inicializado. Finalizando task.");
         vTaskDelete(NULL);
         return;
     }
 
-    while (true) {
+    while (true)
+    {
         startTaskTimer(MONITOR_MHZ19); // Início do timer
 
-        if (sensor->isMHZ19Connected()) {
+        if (sensor->isMHZ19Connected())
+        {
             int co2 = 0;
-            if (sensor->readCO2(co2)) {
+            if (sensor->readCO2(co2))
+            {
                 LOG("MHZ19", "Concentração de CO2: %d ppm", co2);
-            } else {
+            }
+            else
+            {
                 LOG("MHZ19", "Falha na leitura do sensor MH-Z19.");
             }
-        } else {
+        } 
+        else 
+        {
             LOG("MHZ19", "Sensor MH-Z19 desconectado!");
         }
 
@@ -304,16 +416,21 @@ void taskMHZ19(void* parameter) {
     }
 }
 
-void taskSoilMoisture(void* parameter) {
+void taskSoilMoisture(void* parameter) 
+{
     LOG("SOIL", "Task Soil Moisture iniciada.");
-    while (true) {
+    while (true) 
+    {
         startTaskTimer(MONITOR_SOIL); // Início do timer
         
-        if (soilSensor.isSoilMConnected()) {
+        if (soilSensor.isSoilMConnected()) 
+        {
             int analogValue = soilSensor.readAnalog();
             bool digitalValue = soilSensor.readDigital();
             LOG("SOIL", "Umidade analogica: %d, Digital: %s", analogValue, digitalValue ? "HIGH" : "LOW");
-        } else {
+        } 
+        else 
+        {
             LOG("SOIL", "Sensor de umidade do solo desconectado!");
         }
 
@@ -324,13 +441,17 @@ void taskSoilMoisture(void* parameter) {
 
 void taskSoilPH(void* parameter) {
     LOG("PH", "Task de pH do solo iniciada.");
-    while (true) {
+    while (true) 
+    {
         startTaskTimer(MONITOR_SOIL_PH); // Início do timer
 
-        if (soilPHSensor.isSoilPHConnected()) {
+        if (soilPHSensor.isSoilPHConnected()) 
+        {
             float phValue = soilPHSensor.readSoilPH();
             LOG("PH", "Valor de pH do solo: %.2f", phValue);
-        } else {
+        } 
+        else 
+        {
             LOG("PH", "Sensor de pH do solo desconectado!");
         }
 
